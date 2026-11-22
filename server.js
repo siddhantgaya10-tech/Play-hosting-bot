@@ -11,10 +11,10 @@ import { fileURLToPath } from 'url';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
-const USER = process.env.ADMIN_USER || '';
-const PASS = process.env.ADMIN_PASSWORD || '';
+const USER = process.env.ADMIN_USER || 'siddhantgaya10@gmail.com';
+const PASS = process.env.ADMIN_PASSWORD || 'Siddhant@6198';
 if (!USER || PASS.length < 12) {
-  console.error('Startup blocked. Set ADMIN_USER and ADMIN_PASSWORD (at least 12 characters).');
+  console.error('Startup blocked. Check ADMIN_USER and ADMIN_PASSWORD (password must be at least 12 characters).');
   process.exit(1);
 }
 // Generate a fresh signing secret at startup. No SECRET environment variable is needed.

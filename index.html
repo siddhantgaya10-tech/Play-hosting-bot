@@ -1,0 +1,80 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PlayBot · Minecraft player bot</title><link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⛏️</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#e8e6df;--card:#f6f5f0;--ink:#1d2320;--mute:#68716b;--line:#cfcbbf;--grass:#3f8f2b;--dirt:#8a5a3b;--bad:#b3392b;--warn:#b7791f;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#1c211e;--card:#252c28;--ink:#e9ece7;--mute:#97a29b;--line:#37413b;--grass:#6cc24a;--dirt:#c98f62;--bad:#e5766a;--warn:#e0aa4f;color-scheme:dark}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Inter,system-ui,sans-serif}
+h1,h2{font-family:'Bricolage Grotesque',Inter,sans-serif;margin:0;letter-spacing:-.02em}
+.wrap{max-width:980px;margin:0 auto;padding:20px 16px 60px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 22px}
+h1{font-size:34px;font-weight:800}h1 span{color:var(--grass)}
+.sub{color:var(--mute);margin:2px 0 0}
+input,button{font:inherit;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 11px;min-width:0}
+input:focus-visible,button:focus-visible{outline:2px solid var(--grass);outline-offset:1px}
+button{cursor:pointer;font-weight:600}button:hover{border-color:var(--mute)}
+.pri{background:var(--grass);border-color:var(--grass);color:#fff}.pri:hover{filter:brightness(1.07);border-color:var(--grass)}
+.dng{color:var(--bad)}
+form.add{display:grid;grid-template-columns:2fr 1fr 1.3fr 1fr 1.3fr auto;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:18px}
+.err{color:var(--bad);min-height:20px;margin:-8px 2px 10px;font-size:14px}
+.grid{display:grid;gap:14px}
+.bot{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;border-left:6px solid var(--mute)}
+.bot.online{border-left-color:var(--grass)}.bot.connecting,.bot.reconnecting{border-left-color:var(--warn)}
+.top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start}
+.top h2{font-size:20px}.addr{color:var(--mute);font-size:14px;word-break:break-all}
+.badge{font-weight:600;font-size:13px;padding:3px 10px;border-radius:99px;background:var(--bg)}
+.online .badge{color:var(--grass)}.connecting .badge,.reconnecting .badge{color:var(--warn)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.log{background:var(--bg);border-radius:8px;padding:10px;height:150px;overflow:auto;font:12.5px/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--mute)}
+.log b{color:var(--dirt);font-weight:500}
+.chat{display:flex;gap:8px;margin-top:10px}.chat input{flex:1}
+.empty{text-align:center;color:var(--mute);padding:40px 10px;border:1px dashed var(--line);border-radius:12px}
+.login{max-width:340px;margin:18vh auto;display:grid;gap:10px}
+.note{color:var(--mute);font-size:13px;margin-top:26px}
+@media(max-width:760px){form.add{grid-template-columns:1fr 1fr}form.add input:first-child,form.add button{grid-column:1/-1}}
+.file{border:1px solid var(--line);border-radius:8px;padding:9px 11px;cursor:pointer;font-weight:600;background:var(--card)}
+select{font:inherit;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 8px}
+.row input{width:64px}dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);max-width:380px;width:92%}
+dialog::backdrop{background:#0008}dialog form{display:grid;gap:10px}
+</style></head><body><div class="wrap" id="app"></div>
+<script>
+const $=s=>document.querySelector(s),app=$('#app');let token=localStorage.tok||'',bots=new Map(),ws;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const api=async(p,m='GET',b)=>{const r=await fetch('/api'+p,{method:m,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:b?JSON.stringify(b):undefined});const j=await r.json();if(r.status===401&&token){logout();}if(!r.ok)throw Error(j.error||'Request failed');return j};
+function logout(){localStorage.removeItem('tok');token='';ws&&ws.close();loginView()}
+function loginView(){app.innerHTML=`<form class="login" id="lf"><h1>Play<span>Bot</span></h1><p class="sub">Sign in to manage your Minecraft player bot.</p><input id="un" placeholder="Username" autocomplete="username" autofocus required><input id="pw" type="password" placeholder="Password" autocomplete="current-password" required><button class="pri">Sign in</button><div class="err" id="le"></div></form>`;
+$('#lf').onsubmit=async e=>{e.preventDefault();try{const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('#un').value,password:$('#pw').value})});const j=await r.json();if(!r.ok)throw Error(j.error);token=localStorage.tok=j.token;main()}catch(x){$('#le').textContent=x.message}}}
+function main(){app.innerHTML=`<header><div><h1>Play<span>Bot</span></h1><p class="sub">Minecraft player bot for servers you are allowed to join.</p></div><span><button id="lo">Sign out</button></span></header>
+<form class="add" id="af"><input name="host" placeholder="Server address (play.example.net)" required><input name="port" type="number" placeholder="Port (25565)"><input name="username" placeholder="Bot username" required><input name="version" placeholder="Version (auto)"><input name="owner" placeholder="Owner (your MC name)"><select name="auth"><option value="offline">Offline auth (offline-mode servers)</option><option value="microsoft">Microsoft account (Java Premium)</option></select><button class="pri">Connect bot</button></form>
+<div class="err" id="ae"></div><div class="grid" id="list"></div>
+<p class="note">Use this only on servers where bots are permitted. Start the Minecraft server in its hosting panel first, then connect here. This bot does not keep a server awake, auto-reconnect, or bypass host inactivity rules. Microsoft authentication may request a device sign-in in the server logs. Schematic uploads (.schem, .schematic, .nbt) are supported for building.</p>`;
+$('#lo').onclick=logout;
+$('#af').onsubmit=async e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));$('#ae').textContent='';try{await api('/bots','POST',f);e.target.reset()}catch(x){$('#ae').textContent=x.message}};connect()}
+function connect(){ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws?token='+token);
+ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='init'){bots=new Map(m.bots.map(b=>[b.id,b]));render()}else if(m.type==='bot'){const o=bots.get(m.bot.id);bots.set(m.bot.id,{...m.bot,logs:o?o.logs:m.bot.logs});render()}else if(m.type==='removed'){bots.delete(m.id);render()}else if(m.type==='log'){const b=bots.get(m.id);if(b){b.logs.push(m.line);if(b.logs.length>150)b.logs.shift();const el=document.querySelector(`[data-log="${m.id}"]`);if(el){const s=el.scrollTop+el.clientHeight>=el.scrollHeight-20;el.innerHTML=logHtml(b);if(s)el.scrollTop=el.scrollHeight}}}};
+ws.onclose=e=>{if(e.code!==4001&&token)setTimeout(()=>token&&connect(),2000);else if(e.code===4001)logout()}}
+const logHtml=b=>b.logs.map(l=>`<div><b>${new Date(l.t).toLocaleTimeString()}</b> ${esc(l.m)}</div>`).join('');
+const up=s=>{if(!s)return'';let t=Math.floor((Date.now()-s)/1000),d=Math.floor(t/86400),h=Math.floor(t%86400/3600),m=Math.floor(t%3600/60);return(d?d+'d ':'')+(h?h+'h ':'')+m+'m '+t%60+'s'};
+const label={online:'Online',connecting:'Connecting',reconnecting:'Reconnecting',offline:'Offline'};
+function render(){const l=$('#list');if(!l)return;const prev={};l.querySelectorAll('[data-log]').forEach(e=>prev[e.dataset.log]=e.scrollTop);const keep=document.activeElement;const cv=keep&&keep.dataset&&keep.dataset.chat?[keep.dataset.chat,keep.value]:null;
+l.innerHTML=bots.size?[...bots.values()].map(b=>`<article class="bot ${b.status}"><div class="top"><div><h2>${esc(b.username)}</h2><div class="addr">${esc(b.host)}:${b.port}${b.version?' · '+esc(b.version):''}</div></div><div><span class="badge">${label[b.status]}</span> <span class="addr" data-up="${b.since||''}">${up(b.since)}</span></div></div>
+<div class="row">${b.status==="offline"?`<button class="pri" onclick="act('${b.id}','start')">Start</button>`:`<button onclick="act('${b.id}','stop')">Stop</button>`}<button class="dng" onclick="del('${b.id}')">Delete</button></div>
+<div class="addr">Players online: ${b.playerCount||0}${b.players?.length?' · '+b.players.map(esc).join(', '):''}${b.health!==null&&b.health!==undefined?' · HP '+Math.round(b.health)+' · Food '+Math.round(b.food):''}</div><div class="log" data-log="${b.id}">${logHtml(b)}</div>
+<form class="chat" onsubmit="owner(event,'${b.id}')"><input data-chat="own-${b.id}" value="${esc(b.owner||'')}" placeholder="Owner's Minecraft name" maxlength="16"><button>Set owner</button></form>
+${b.status==='online'?`<form class="chat" onsubmit="chat(event,'${b.id}')"><input data-chat="${b.id}" placeholder="Send a chat message or command" maxlength="250"><button>Send</button></form>`:''}
+${b.status==='online'?`<div class="row"><label class="file">📎 Upload schematic (.schem/.schematic/.nbt)<input type="file" accept=".schem,.schematic,.nbt" onchange="pick(event,'${b.id}')" hidden></label>${pend[b.id]?`<span class="addr">${esc(pend[b.id].name)} <a href="#" onclick="unpick('${b.id}');return false">remove</a></span><button onclick="buildSchematic('${b.id}')">Build schematic</button>`:''}
+<select onchange="opt('${b.id}','mode',this.value)"><option value="op" ${(opts[b.id]||{}).mode!=='survival'?'selected':''}>Instant (bot is OP)</option><option value="survival" ${(opts[b.id]||{}).mode==='survival'?'selected':''}>Survival (its own items)</option></select>
+<input data-chat="x-${b.id}" placeholder="x" value="${esc((opts[b.id]||{}).x||'')}" oninput="opt('${b.id}','x',this.value)"><input data-chat="y-${b.id}" placeholder="y" value="${esc((opts[b.id]||{}).y||'')}" oninput="opt('${b.id}','y',this.value)"><input data-chat="z-${b.id}" placeholder="z" value="${esc((opts[b.id]||{}).z||'')}" oninput="opt('${b.id}','z',this.value)"></div>`:''}</article>`).join(''):'<div class="empty">No bots yet. Add your Minecraft Java server address above, then connect when the server is running.</div>';
+l.querySelectorAll('[data-log]').forEach(e=>e.scrollTop=prev[e.dataset.log]??e.scrollHeight);if(cv){const i=l.querySelector(`[data-chat="${cv[0]}"]`);if(i){i.value=cv[1];i.focus()}}}
+setInterval(()=>document.querySelectorAll('[data-up]').forEach(e=>{if(e.dataset.up)e.textContent=up(+e.dataset.up)}),1000);
+window.act=(id,a)=>api(`/bots/${id}/${a}`,'POST').catch(x=>alert(x.message));
+window.del=id=>confirm('Delete this bot?')&&api('/bots/'+id,'DELETE').catch(x=>alert(x.message));
+window.owner=(e,id)=>{e.preventDefault();api('/bots/'+id,'PATCH',{owner:e.target.querySelector('input').value.trim()}).catch(x=>alert(x.message))};
+window.chat=(e,id)=>{e.preventDefault();const i=e.target.querySelector('input');if(!i.value)return;api(`/bots/${id}/chat`,'POST',{message:i.value}).then(()=>i.value='').catch(x=>alert(x.message))};
+const pend={},opts={};
+window.opt=(id,k,v)=>{(opts[id]=opts[id]||{})[k]=v};
+window.unpick=id=>{delete pend[id];render()};
+window.pick=(e,id)=>{const f=e.target.files[0];if(!f)return;const ext=f.name.toLowerCase().split('.').pop();if(!['schem','schematic','nbt'].includes(ext)){alert('Choose a .schem, .schematic or .nbt file.');e.target.value='';return}const r=new FileReader();r.onload=()=>{pend[id]={name:f.name,kind:'schematic',data:r.result.split(',')[1]};render()};r.readAsDataURL(f)};
+window.buildSchematic=async id=>{const p=pend[id],o=opts[id]||{};if(!p)return;try{await api(`/bots/${id}/build`,'POST',{kind:'schematic',data:p.data,mode:o.mode||'op',x:o.x,y:o.y,z:o.z});delete pend[id];render()}catch(x){alert(x.message)}};
+token?main():loginView();
+</script></body></html>
